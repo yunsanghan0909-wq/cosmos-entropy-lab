@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>블랙홀 엔트로피 3D 시뮬레이터</title>
+<style>
+:root{--bg:#eef2f9;--panel:#fff;--line:#c4cfe2;--text:#14213a;--muted:#55657f;--stat:#eef2f9;--btn:#e3eaf6;--bd:#9fb2d3;--prim:#315ed0;--wbg:#fff0dc;--wtx:#5a3200;--ebg:#ffe3e7;--etx:#6b0f1d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#080e1c;--panel:#111d30;--line:#30415d;--text:#e8efff;--muted:#a8bad5;--stat:#0a1425;--btn:#1b2d49;--bd:#49618a;--wbg:#4a2a10;--wtx:#ffe2c4;--ebg:#4a1018;--etx:#ffd5db}}
+:root[data-theme="dark"]{--bg:#080e1c;--panel:#111d30;--line:#30415d;--text:#e8efff;--muted:#a8bad5;--stat:#0a1425;--btn:#1b2d49;--bd:#49618a;--wbg:#4a2a10;--wtx:#ffe2c4;--ebg:#4a1018;--etx:#ffd5db}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;padding:16px;background:var(--bg);color:var(--text);font:15px -apple-system,system-ui,"Apple SD Gothic Neo",sans-serif}
+main{max-width:1000px;margin:auto}
+h1{font-size:24px;margin:8px 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px;margin:12px 0}
+canvas{width:100%;height:auto;background:#05080f;border-radius:8px;display:block}
+#space{touch-action:none;cursor:grab}
+.row{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0}
+button{padding:10px 14px;min-height:44px;border-radius:8px;border:1px solid var(--bd);background:var(--btn);color:var(--text);cursor:pointer;font:inherit;-webkit-appearance:none;appearance:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button.primary{background:var(--prim);border-color:var(--prim);color:#fff}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:var(--stat);border:1px solid var(--line);border-radius:9px;padding:10px}
+.stat small{display:block;color:var(--muted);font-size:11px}
+.stat b{font-size:21px}
+.controls{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.control label{display:flex;justify-content:space-between;font-size:13px}
+.control input{width:100%;accent-color:#5b8cff;touch-action:manipulation}
+.muted{color:var(--muted);font-size:12px;line-height:1.6}
+#status{font-size:14px}
+.warn{background:var(--wbg);color:var(--wtx);border:1px solid #ff9d4d;border-radius:10px;padding:12px;margin:12px 0;font-size:14px;line-height:1.7}
+.err{background:var(--ebg);color:var(--etx);border:1px solid #ff5d73;border-radius:10px;padding:12px;margin:12px 0;font-size:13px;word-break:break-all}
+.cap{margin:12px 0 6px;font-weight:600}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.controls{grid-template-columns:1fr}body{padding:10px}}
+</style>
+</head>
+<body>
+<main>
+<h1>COSMOS / ENTROPY LAB 3D</h1>
+<div id="jsWarn" class="warn"><b>⚠ JavaScript가 실행되지 않고 있습니다.</b><br>이 경고가 보이면 시뮬레이션은 동작하지 않습니다. 파일 앱·메일·메신저의 미리보기는 JavaScript를 차단합니다. Safari 같은 실제 브라우저에서 열고, 설정 → Safari → 고급 → JavaScript가 켜져 있는지 확인하세요.</div>
+<div id="errBox" class="err" style="display:none" role="alert"></div>
+<p class="muted">블랙홀을 통한 입자(천체) 이동과 우주 내부 엔트로피 변화 사고실험 · 화면을 드래그하면 회전, 휠 또는 두 손가락 핀치로 확대/축소</p>
+
+<section class="panel">
+<canvas id="space" width="1000" height="700"></canvas>
+<div class="row muted"><span>⭐ 항성</span><span>🌍 행성</span><span>🪐 거성</span><span>☄️ 소행성</span><span>🟣 낙하 중(보라 궤적)</span><span>🟢 사건의 지평선</span></div>
+<div class="row">
+<button type="button" class="primary" id="start">▶ 시작</button>
+<button type="button" id="pause">Ⅱ 일시정지</button>
+<button type="button" id="step">한 단계 진행</button>
+<button type="button" id="reset">↺ 초기화</button>
+<button type="button" id="auto">자동 회전: 켬</button>
+<button type="button" id="view">시점 초기화</button>
+</div>
+<p id="status">스크립트 실행 전</p>
+</section>
+
+<div class="stats">
+<div class="stat"><small>우주 내부 입자</small><b id="inside">0</b></div>
+<div class="stat"><small>우주 외부 입자</small><b id="outside">0</b></div>
+<div class="stat"><small>외부 이동 누적</small><b id="transfers">0</b></div>
+<div class="stat"><small>충돌 누적</small><b id="collisions">0</b></div>
+</div>
+
+<section class="panel"><b>엔트로피 수치</b>
+<div class="stats" style="margin-top:10px">
+<div class="stat"><small>누적 생성 지수</small><b id="generated">0</b></div>
+<div class="stat"><small>누적 유출 지수</small><b id="outflow">0</b></div>
+<div class="stat"><small>내부 순변화 지수</small><b id="net">0</b></div>
+<div class="stat"><small>공간 분포 엔트로피 (bit)</small><b id="spatial">0</b></div>
+</div>
+<p class="muted">내부 순변화 = 누적 생성 − 누적 유출. 실제 엔트로피(J/K)가 아닌 교육용 지수입니다.</p>
+</section>
+
+<section class="panel"><b>엔트로피 그래프</b>
+<div class="cap">1. 누적 생성 · 누적 유출 · 순변화</div><canvas id="ch1" width="1000" height="300"></canvas>
+<div class="cap">2. 우주 내부 엔트로피 변화량 (생성 − 유출)</div><canvas id="ch2" width="1000" height="300"></canvas>
+<div class="cap">3. 우주 내부 공간 분포 엔트로피 (3D 격자 4×4×4, 최대 6 bit)</div><canvas id="ch3" width="1000" height="300"></canvas>
+<p class="muted">2번 그래프가 점선(0) 아래로 내려가면 모형상 내부 엔트로피가 누적 감소한 상태입니다. 이것만으로 시간이 역행하는 것은 아닙니다.</p>
+</section>
+
+<section class="panel"><b>실험 변수</b>
+<div class="controls">
+<div class="control"><label>사건의 지평선 반경 <b id="rv">52</b></label><input id="radius" type="range" min="25" max="105" value="52"></div>
+<div class="control"><label>블랙홀 인력 강도 <b id="gv">0.14</b></label><input id="gravity" type="range" min="3" max="35" value="14"></div>
+<div class="control"><label>입자 운동 속도 <b id="sv">1.0</b></label><input id="speed" type="range" min="3" max="25" value="10"></div>
+<div class="control"><label>초기 입자 수 (초기화 시 적용) <b id="cv">120</b></label><input id="count" type="range" min="30" max="240" step="10" value="120"></div>
+<div class="control"><label>입자당 유출 지수 <b id="lv">0.08</b></label><input id="leak" type="range" min="1" max="30" value="8"></div>
+<div class="control"><label>내부 생성 강도 <b id="pv">1.0</b></label><input id="production" type="range" min="2" max="25" value="10"></div>
+</div>
+</section>
+
+<section class="panel"><b>모형의 규칙과 한계</b>
+<p class="muted">천체(입자)는 3차원 공간에서 무작위로 움직이고 서로 충돌하며, 충돌하면 생성 지수가 늘어납니다. 사건의 지평선 안으로 들어간 천체는 중심으로 끌려가고, 중심에 닿으면 우리 우주에서 사라져 외부 우주에 같은 종류의 천체로 나타납니다. 이때 유출 지수가 내부 수치에서 차감됩니다.<br><br>
+<b>과학적 한계:</b> 실제 블랙홀 자체에도 베켄슈타인–호킹 엔트로피가 있고, 실제 총 엔트로피는 블랙홀, 외부 물질, 복사, 상관관계를 함께 따져야 합니다. 이 모델은 변수 관계를 관찰하는 단순화된 시뮬레이션입니다. 천체의 크기와 거리는 실제 비율이 아닙니다.</p>
+</section>
+</main>
+<noscript><div class="warn" style="max-width:1000px;margin:12px auto">JavaScript가 꺼져 있습니다. 설정 → Safari → 고급 → JavaScript를 켜 주세요.</div></noscript>
+
+<script>
+(function () {
+'use strict';
+function $(i) { return document.getElementById(i); }
+var jw = $('jsWarn'); if (jw) jw.style.display = 'none';
+function err(m) { var b = $('errBox'); b.style.display = 'block'; b.textContent = '오류: ' + m; }
+window.addEventListener('error', function (e) { err((e.message || 'unknown') + (e.lineno ? ' (줄 ' + e.lineno + ')' : '')); });
+try { main(); } catch (e) { err(e.message || String(e)); }
+
+function main() {
+  var DPR = Math.min(2, window.devicePixelRatio || 1);
+  function fit(id, w, h) {
+    var cv = $(id); cv.width = w * DPR; cv.height = h * DPR;
+    var x = cv.getContext('2d'); if (!x) throw new Error('Canvas 2D를 사용할 수 없습니다.');
+    x.setTransform(DPR, 0, 0, DPR, 0, 0); return x;
+  }
+  var W = 1000, HT = 700;
+  var c = fit('space', W, HT), c1 = fit('ch1', 1000, 300), c2 = fit('ch2', 1000, 300), c3 = fit('ch3', 1000, 300);
+
+  // 월드: 우리 우주(왼쪽 큐브), 외부 우주(오른쪽 큐브), 블랙홀은 우리 우주 중심
+  var H = 130, EH = 80, UC = { x: -150, y: 0, z: 0 }, EC = { x: 150, y: 0, z: 0 }, TG = { x: -35, y: 0, z: 0 };
+  var K = 0.6, F = 1150;
+  var TY = [
+    { n: '항성', r: 5, w: 0.15, cs: ['#fffbe0', '#ffd45c', '#c27a00'], star: 1 },
+    { n: '행성', r: 3.6, w: 0.35, cs: ['#d6f0ff', '#3d8bff', '#0b2a6b'] },
+    { n: '거성', r: 4.8, w: 0.2, cs: ['#ffe6c4', '#d98a45', '#6b3410'], ring: 1 },
+    { n: '소행성', r: 2.4, w: 0.3, cs: ['#d8d3ca', '#8f897f', '#3d3a35'] }
+  ];
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function pick() { var u = Math.random(), s = 0; for (var i = 0; i < TY.length; i++) { s += TY[i].w; if (u < s) return TY[i]; } return TY[3]; }
+
+  var ps = [], out = [], hist = [], disk = [], stars = [];
+  var run = false, steps = 0, coll = 0, trans = 0, gen = 0, leakSum = 0, diskA = 0, fc = 0;
+  var Rw = 26, G = 0.14, V = 1, L = 0.08, P = 1;
+  var yaw = 0.5, pitch = 0.35, dist = 650, auto = true, lastT = 0, acc = 0, dead = false;
+
+  for (var i = 0; i < 90; i++) stars.push([rnd(0, W), rnd(0, HT), rnd(0.2, 0.8), Math.random() < 0.2 ? 2 : 1]);
+  for (i = 0; i < 150; i++) disk.push({ u: Math.random(), a: rnd(0, 6.283) });
+
+  function setStatus(t) { $('status').textContent = t; }
+  function readParams() {
+    Rw = +$('radius').value * 0.5; G = +$('gravity').value / 100; V = +$('speed').value / 10;
+    L = +$('leak').value / 100; P = +$('production').value / 10;
+  }
+  function make() {
+    var x, y, z, t = 0;
+    do { x = rnd(-H + 6, H - 6); y = rnd(-H + 6, H - 6); z = rnd(-H + 6, H - 6); t++; }
+    while (Math.hypot(x, y, z) < Rw + 14 && t < 50);
+    return { x: x, y: y, z: z, vx: rnd(-1, 1), vy: rnd(-1, 1), vz: rnd(-1, 1), fall: false, t: pick() };
+  }
+
+  // ---------- 물리 1단계 ----------
+  function physics() {
+    var n = ps.length, i, j, lim = H - 4;
+    for (i = ps.length - 1; i >= 0; i--) {
+      var p = ps[i];
+      p.vx += rnd(-0.18, 0.18) * V; p.vy += rnd(-0.18, 0.18) * V; p.vz += rnd(-0.18, 0.18) * V;
+      var d = Math.hypot(p.x, p.y, p.z) || 1;
+      if (d < Rw) p.fall = true;
+      if (p.fall) {
+        var f = G * (1 + Rw / Math.max(d, 5));
+        p.vx -= p.x / d * f; p.vy -= p.y / d * f; p.vz -= p.z / d * f;
+      }
+      p.vx *= 0.986; p.vy *= 0.986; p.vz *= 0.986;
+      var v = Math.hypot(p.vx, p.vy, p.vz), mx = 2.6 * V;
+      if (v > mx) { p.vx *= mx / v; p.vy *= mx / v; p.vz *= mx / v; }
+      p.x += p.vx * K; p.y += p.vy * K; p.z += p.vz * K;
+      if (p.fall && d < 6) {
+        ps.splice(i, 1);
+        out.push({ x: rnd(-EH + 8, EH - 8), y: rnd(-EH + 8, EH - 8), z: rnd(-EH + 8, EH - 8), t: p.t });
+        trans++; leakSum += L; continue;
+      }
+      if (p.x < -lim || p.x > lim) p.vx *= -1;
+      if (p.y < -lim || p.y > lim) p.vy *= -1;
+      if (p.z < -lim || p.z > lim) p.vz *= -1;
+      p.x = clamp(p.x, -lim, lim); p.y = clamp(p.y, -lim, lim); p.z = clamp(p.z, -lim, lim);
+    }
+    for (i = 0; i < ps.length; i++) {
+      for (j = i + 1; j < ps.length; j++) {
+        var a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        var dd = Math.hypot(dx, dy, dz), rc = (a.t.r + b.t.r) * 1.6;
+        if (dd > 0 && dd < rc) {
+          var nx = dx / dd, ny = dy / dd, nz = dz / dd;
+          var dv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny + (a.vz - b.vz) * nz;
+          if (dv > 0) {
+            a.vx -= dv * nx; b.vx += dv * nx; a.vy -= dv * ny; b.vy += dv * ny; a.vz -= dv * nz; b.vz += dv * nz;
+          }
+          coll++; gen += 0.012 * P;
+        }
+      }
+    }
+    gen += n * 0.0009 * V * P;
+    var eh = EH - 5;
+    for (i = 0; i < out.length; i++) {
+      var o = out[i];
+      o.x = clamp(o.x + rnd(-0.5, 0.5), -eh, eh); o.y = clamp(o.y + rnd(-0.5, 0.5), -eh, eh); o.z = clamp(o.z + rnd(-0.5, 0.5), -eh, eh);
+    }
+    steps++;
+    if (steps % 5 === 0) {
+      hist.push({ a: gen, b: leakSum, n: gen - leakSum, s: spatial() });
+      if (hist.length > 180) hist.shift();
+    }
+  }
+
+  function spatial() {
+    if (!ps.length) return 0;
+    var bins = [], i, s = 0;
+    for (i = 0; i < 64; i++) bins.push(0);
+    for (i = 0; i < ps.length; i++) {
+      var bx = clamp(Math.floor((ps[i].x + H) / (2 * H) * 4), 0, 3);
+      var by = clamp(Math.floor((ps[i].y + H) / (2 * H) * 4), 0, 3);
+      var bz = clamp(Math.floor((ps[i].z + H) / (2 * H) * 4), 0, 3);
+      bins[bx + 4 * by + 16 * bz]++;
+    }
+    for (i = 0; i < 64; i++) if (bins[i]) { var q = bins[i] / ps.length; s -= q * Math.log(q) / Math.LN2; }
+    return s;
+  }
+
+  // ---------- 3D 투영 ----------
+  var cy_, sy_, cp_, sp_;
+  function pr(x, y, z) {
+    var X = x - TG.x, Y = y - TG.y, Z = z - TG.z;
+    var x1 = X * cy_ + Z * sy_, z1 = -X * sy_ + Z * cy_;
+    var y2 = Y * cp_ - z1 * sp_, z2 = Y * sp_ + z1 * cp_, dd = dist - z2;
+    if (dd < 40) return null;
+    var s = F / dd;
+    return [W / 2 + x1 * s, HT / 2 - y2 * s, s, dd];
+  }
+  function box(o, h, col, label) {
+    var q = [], i, b;
+    for (i = 0; i < 8; i++) q.push(pr(o.x + ((i & 1) ? h : -h), o.y + ((i & 2) ? h : -h), o.z + ((i & 4) ? h : -h)));
+    c.strokeStyle = col; c.lineWidth = 1.5; c.beginPath();
+    for (i = 0; i < 8; i++) for (b = 1; b < 8; b <<= 1)
+      if (!(i & b) && q[i] && q[i | b]) { c.moveTo(q[i][0], q[i][1]); c.lineTo(q[i | b][0], q[i | b][1]); }
+    c.stroke();
+    var lp = pr(o.x, o.y + h + 14, o.z);
+    if (lp) { c.fillStyle = col; c.font = 'bold 20px sans-serif'; c.textAlign = 'center'; c.fillText(label, lp[0], lp[1]); c.textAlign = 'left'; }
+  }
+  function body(o, q, fall) {
+    var t = o.t, rr = t.r * q[2], x = q[0], y = q[1], g;
+    if (t.star) {
+      g = c.createRadialGradient(x, y, rr * 0.3, x, y, rr * 2.8);
+      g.addColorStop(0, 'rgba(255,210,90,.55)'); g.addColorStop(1, 'rgba(255,210,90,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(x, y, rr * 2.8, 0, 6.283); c.fill();
+    }
+    g = c.createRadialGradient(x - rr * 0.35, y - rr * 0.35, rr * 0.1, x, y, rr);
+    g.addColorStop(0, t.cs[0]); g.addColorStop(0.5, t.cs[1]); g.addColorStop(1, t.cs[2]);
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, rr, 0, 6.283); c.fill();
+    if (t.ring) {
+      c.strokeStyle = 'rgba(235,205,150,.85)'; c.lineWidth = Math.max(1, rr * 0.22);
+      c.beginPath(); c.ellipse(x, y, rr * 1.9, rr * 0.55, -0.4, 0, 6.283); c.stroke();
+    }
+    if (fall) {
+      var q2 = pr(UC.x + o.x - o.vx * 12, UC.y + o.y - o.vy * 12, UC.z + o.z - o.vz * 12);
+      if (q2) { c.strokeStyle = 'rgba(195,162,255,.6)'; c.lineWidth = Math.max(1.5, rr * 0.8); c.beginPath(); c.moveTo(x, y); c.lineTo(q2[0], q2[1]); c.stroke(); }
+      c.strokeStyle = '#c3a2ff'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, rr + 2, 0, 6.283); c.stroke();
+    }
+  }
+  function core(q) {
+    var rr = Rw * 0.55 * q[2], g = c.createRadialGradient(q[0], q[1], rr * 0.2, q[0], q[1], rr * 1.35);
+    g.addColorStop(0, '#000'); g.addColorStop(0.74, '#000'); g.addColorStop(0.8, '#3a1d66'); g.addColorStop(1, 'rgba(140,97,201,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(q[0], q[1], rr * 1.35, 0, 6.283); c.fill();
+    c.strokeStyle = '#c09aff'; c.lineWidth = 2; c.beginPath(); c.arc(q[0], q[1], rr * 1.02, 0, 6.283); c.stroke();
+  }
+  function wire() {
+    c.strokeStyle = 'rgba(72,223,198,.5)'; c.lineWidth = 1.2;
+    for (var k = 0; k < 5; k++) {
+      c.beginPath(); var first = true;
+      for (var j = 0; j <= 36; j++) {
+        var a = j / 36 * 6.2832, ca = Math.cos(a) * Rw, sa = Math.sin(a) * Rw, p;
+        if (k === 0) p = [ca, sa, 0]; else if (k === 1) p = [0, ca, sa]; else if (k === 2) p = [ca, 0, sa];
+        else if (k === 3) p = [ca * 0.8, 0.6 * Rw, sa * 0.8]; else p = [ca * 0.8, -0.6 * Rw, sa * 0.8];
+        var q = pr(UC.x + p[0], UC.y + p[1], UC.z + p[2]);
+        if (!q) continue;
+        if (first) { c.moveTo(q[0], q[1]); first = false; } else c.lineTo(q[0], q[1]);
+      }
+      c.stroke();
+    }
+  }
+
+  function render() {
+    cy_ = Math.cos(yaw); sy_ = Math.sin(yaw); cp_ = Math.cos(pitch); sp_ = Math.sin(pitch);
+    c.fillStyle = '#04070e'; c.fillRect(0, 0, W, HT);
+    var i, q, it = [];
+    for (i = 0; i < stars.length; i++) { c.fillStyle = 'rgba(200,220,255,' + stars[i][2] + ')'; c.fillRect(stars[i][0], stars[i][1], stars[i][3], stars[i][3]); }
+    box(UC, H, 'rgba(130,170,230,.7)', '우리 우주');
+    box(EC, EH, 'rgba(255,170,90,.8)', '외부 우주');
+    for (i = 0; i < ps.length; i++) { q = pr(UC.x + ps[i].x, UC.y + ps[i].y, UC.z + ps[i].z); if (q) it.push([q[3], 0, ps[i], q]); }
+    for (i = 0; i < out.length; i++) { q = pr(EC.x + out[i].x, EC.y + out[i].y, EC.z + out[i].z); if (q) it.push([q[3], 1, out[i], q]); }
+    q = pr(UC.x, UC.y, UC.z); if (q) it.push([q[3], 2, null, q]);
+    var st = Math.sin(0.35), ct = Math.cos(0.35);
+    for (i = 0; i < disk.length; i++) {
+      var d = disk[i], r = Rw * (0.8 + d.u * 0.9), a = d.a + diskA / Math.sqrt(0.4 + d.u);
+      var zz = r * Math.sin(a);
+      q = pr(UC.x + r * Math.cos(a), UC.y + zz * st, UC.z + zz * ct);
+      if (q) it.push([q[3], 3, d, q]);
+    }
+    it.sort(function (a, b) { return b[0] - a[0]; });
+    for (i = 0; i < it.length; i++) {
+      var e = it[i];
+      if (e[1] === 0) body(e[2], e[3], e[2].fall);
+      else if (e[1] === 1) body(e[2], e[3], false);
+      else if (e[1] === 2) core(e[3]);
+      else {
+        c.fillStyle = 'hsl(' + (20 + 30 * (1 - e[2].u)) + ',100%,' + (58 + 22 * (1 - e[2].u)) + '%)';
+        c.beginPath(); c.arc(e[3][0], e[3][1], Math.max(1, 1.3 * e[3][2]), 0, 6.283); c.fill();
+      }
+    }
+    wire();
+    c.fillStyle = '#9fb4d6'; c.font = '18px sans-serif';
+    c.fillText('우리 우주 ' + ps.length + '개 · 외부 우주 ' + out.length + '개', 16, 28);
+  }
+
+  // ---------- 수치와 그래프 ----------
+  function nums() {
+    $('inside').textContent = ps.length; $('outside').textContent = out.length;
+    $('transfers').textContent = trans; $('collisions').textContent = coll;
+    $('generated').textContent = gen.toFixed(2); $('outflow').textContent = leakSum.toFixed(2);
+    $('net').textContent = (gen - leakSum).toFixed(2); $('spatial').textContent = spatial().toFixed(2);
+  }
+  function chart(x, ser, lo, hi, dec) {
+    var w = 1000, h = 300, pl = 70, pt = 34, pb = 24, i, mn = lo, mx = hi;
+    x.fillStyle = '#080d19'; x.fillRect(0, 0, w, h);
+    hist.forEach(function (v) { ser.forEach(function (s) { mn = Math.min(mn, v[s[0]]); mx = Math.max(mx, v[s[0]]); }); });
+    if (mx - mn < 1e-6) mx = mn + 1;
+    function Y(v) { return h - pb - (v - mn) / (mx - mn) * (h - pt - pb); }
+    x.font = '16px sans-serif'; x.lineWidth = 1;
+    for (i = 0; i <= 4; i++) {
+      var v = mn + (mx - mn) * i / 4, yy = Y(v);
+      x.strokeStyle = '#293b56'; x.beginPath(); x.moveTo(pl, yy); x.lineTo(w - 16, yy); x.stroke();
+      x.fillStyle = '#9aabc5'; x.fillText(v.toFixed(dec), 4, yy + 5);
+    }
+    if (x.setLineDash) x.setLineDash([5, 5]);
+    x.strokeStyle = '#8fa0bb'; x.beginPath(); x.moveTo(pl, Y(0)); x.lineTo(w - 16, Y(0)); x.stroke();
+    if (x.setLineDash) x.setLineDash([]);
+    ser.forEach(function (s, j) { x.fillStyle = s[2]; x.fillText('● ' + s[1], pl + 8 + j * 190, 22); });
+    if (hist.length < 2) { x.fillStyle = '#b0c1da'; x.fillText('시작하면 그래프가 표시됩니다.', 380, 160); return; }
+    ser.forEach(function (s) {
+      x.beginPath();
+      hist.forEach(function (hv, k) {
+        var px = pl + k / (hist.length - 1) * (w - 16 - pl);
+        if (k) x.lineTo(px, Y(hv[s[0]])); else x.moveTo(px, Y(hv[s[0]]));
+      });
+      x.strokeStyle = s[2]; x.lineWidth = 3; x.stroke();
+    });
+  }
+  function charts() {
+    chart(c1, [['a', '누적 생성', '#69a7ff'], ['b', '누적 유출', '#ffb36b'], ['n', '순변화', '#48dfc6']], 0, 1, 1);
+    chart(c2, [['n', '내부 엔트로피 변화량 (생성 − 유출)', '#48dfc6']], 0, 1, 1);
+    chart(c3, [['s', '공간 분포 엔트로피 (bit)', '#ffd45c']], 0, 6, 1);
+  }
+  function update() { nums(); charts(); }
+
+  // ---------- 실행 루프 (렌더는 항상, 물리는 실행 중에만) ----------
+  function frame(t) {
+    if (dead) return;
+    requestAnimationFrame(frame);
+    try {
+      var dt = Math.min(100, t - lastT); lastT = t;
+      if (run) {
+        acc += dt; var n = 0;
+        while (acc >= 8.33 && n < 12) { physics(); acc -= 8.33; n++; }
+        fc++; nums(); if (fc % 3 === 0) charts();
+        setStatus('실행 중 · 단계 ' + steps);
+      }
+      if (auto) yaw += dt * 0.00022;
+      diskA += dt * (run ? 0.0018 : 0.0006);
+      render();
+    } catch (e) {
+      dead = true; run = false; err(e.message || String(e)); setStatus('오류로 중단됨');
+    }
+  }
+
+  function reset() {
+    run = false; acc = 0; readParams();
+    var n = +$('count').value; ps = [];
+    for (var i = 0; i < n; i++) ps.push(make());
+    out = []; hist = []; coll = 0; trans = 0; gen = 0; leakSum = 0; steps = 0;
+    update(); if (!dead) render();
+    setStatus('초기화 완료 · 입자 ' + ps.length + '개 · 시작 버튼을 누르세요.');
+  }
+
+  $('start').addEventListener('click', function () { if (run) return; readParams(); run = true; setStatus('실행 중 · 단계 ' + steps); });
+  $('pause').addEventListener('click', function () { run = false; setStatus('일시정지 · 상태 보존 (단계 ' + steps + ')'); });
+  $('step').addEventListener('click', function () { if (run) return; readParams(); physics(); update(); setStatus('한 단계 진행 · 단계 ' + steps); });
+  $('reset').addEventListener('click', reset);
+  function setAuto(v) { auto = v; $('auto').textContent = '자동 회전: ' + (v ? '켬' : '끔'); }
+  $('auto').addEventListener('click', function () { setAuto(!auto); });
+  $('view').addEventListener('click', function () { yaw = 0.5; pitch = 0.35; dist = 650; });
+
+  var sl = [['radius', 'rv', function (v) { return v; }], ['gravity', 'gv', function (v) { return (v / 100).toFixed(2); }],
+    ['speed', 'sv', function (v) { return (v / 10).toFixed(1); }], ['count', 'cv', function (v) { return v; }],
+    ['leak', 'lv', function (v) { return (v / 100).toFixed(2); }], ['production', 'pv', function (v) { return (v / 10).toFixed(1); }]];
+  sl.forEach(function (s) {
+    var inp = $(s[0]), lab = $(s[1]), f = s[2];
+    function on() { lab.textContent = f(+inp.value); readParams(); }
+    inp.addEventListener('input', on); inp.addEventListener('change', on); lab.textContent = f(+inp.value);
+  });
+
+  // ---------- 드래그 회전 / 핀치·휠 확대 ----------
+  var cv = $('space'), pts = {};
+  function pinchDist() { var k = Object.keys(pts); return Math.hypot(pts[k[0]].x - pts[k[1]].x, pts[k[0]].y - pts[k[1]].y); }
+  cv.addEventListener('pointerdown', function (e) {
+    if (cv.setPointerCapture) try { cv.setPointerCapture(e.pointerId); } catch (x) {}
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY }; setAuto(false);
+  });
+  cv.addEventListener('pointermove', function (e) {
+    var p = pts[e.pointerId]; if (!p) return;
+    if (Object.keys(pts).length === 1) {
+      yaw += (e.clientX - p.x) * 0.008; pitch = clamp(pitch + (e.clientY - p.y) * 0.008, -1.5, 1.5);
+      p.x = e.clientX; p.y = e.clientY;
+    } else {
+      var d0 = pinchDist(); p.x = e.clientX; p.y = e.clientY; var d1 = pinchDist();
+      if (d1 > 0) dist = clamp(dist * d0 / d1, 250, 1400);
+    }
+  });
+  function up(e) { delete pts[e.pointerId]; }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.addEventListener('pointerleave', up);
+  cv.addEventListener('wheel', function (e) { e.preventDefault(); dist = clamp(dist * (1 + e.deltaY * 0.001), 250, 1400); }, { passive: false });
+
+  reset();
+  requestAnimationFrame(frame);
+}
+})();
+</script>
+</body>
+</html>
